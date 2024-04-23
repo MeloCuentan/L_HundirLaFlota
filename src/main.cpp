@@ -61,7 +61,9 @@ enum nombreSonidos
 };
 
 // Variables generales
-float volumen = 0.15; // Volumen predeterminado
+uint8_t alcanzado = 0;
+bool finJuego = false;
+float volumen = 0.5; // Volumen predeterminado
 uint8_t sonido = 0;   // Indice de sonido
 int j = 0;            // conteo del array
 int i = 0;            // conteo del array
@@ -124,8 +126,17 @@ int8_t cursorEjeY = 0; // Posición Y del cursor en el mapa
 uint32_t tiempoRefresco;          // Control de tiempo para refrescar las pantallas
 uint32_t intervaloRefersco = 100; // Tiempo de refesco de las pantallas
 
-const uint8_t mapaVacio[8][8] = {VACIO}; // Creamos un mapa con todos los valores vacíos
-uint8_t mapaAliado[8][8] = {VACIO};      // Mapa de nuestros barcos
+const uint8_t mapaVacio[8][8] = { // Creamos un mapa con todos los valores vacíos
+    0, 0, 0, 0, 6, 6, 6, 6,
+    0, 5, 0, 0, 0, 0, 0, 0,
+    0, 5, 0, 7, 7, 7, 7, 7,
+    0, 5, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, 3, 3, 0, 0, 4, 4, 4,
+    0, 0, 0, 0, 0, 0, 0, 0};
+;
+uint8_t mapaAliado[8][8] = {VACIO}; // Mapa de nuestros barcos
 // uint8_t mapaEnemigo[8][8] = {VACIO};     // Mapa de los barcos del enemigo
 
 uint8_t mapaEnemigo[8][8] = {
@@ -136,8 +147,7 @@ uint8_t mapaEnemigo[8][8] = {
     0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0,
     0, 3, 3, 0, 0, 4, 4, 4,
-    0, 0, 0, 0, 0, 0, 0, 0
-};
+    0, 0, 0, 0, 0, 0, 0, 0};
 
 const uint16_t ejeLetras[8] = {27, 52, 77, 102, 127, 152, 177, 202};     // Número en píxeles del eje X de cada cuadro
 const uint16_t ejeNumeros[8] = {111, 136, 161, 186, 211, 236, 261, 286}; // Número en píxeles del eje Y de cada cuadro
@@ -154,6 +164,7 @@ void controlBotones();                                      // Controlar el bot�
 uint16_t colorCasillaAnteriorEnemigo(uint8_t X, uint8_t Y); // Establece el color de la casilla
 void displayAliado();                                       // Mostrar la imagen en el display Aliado
 void displayEnemigo();                                      // Mostrar la imagen en el display Enemigo
+void finPartida();
 
 TFT_eSPI tft = TFT_eSPI(); // Creamos objeto de una pantalla (se utilizarán las dos cambiando el estado del pin CS)
 
@@ -201,7 +212,8 @@ void loop()
   }
 }
 
-void iniciarI2C() {
+void iniciarI2C()
+{
   i2sConfig.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX);
   i2sConfig.sample_rate = 44100;
   i2sConfig.bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT;
@@ -225,6 +237,14 @@ void iniciarI2C() {
 
 void reproduce()
 {
+  static uint8_t sonidoAnterior;
+  if (sonidoAnterior != sonido)
+  {
+    sonidoAnterior = sonido;
+    dato = 0;
+    i = 0;
+    j = 0;
+  }
   float ajusteVolumen = 1.0;
   if (sonido == SONIDO_AGUA || sonido == SONIDO_TOCADO)
   {
@@ -259,7 +279,8 @@ void reproduce()
 
   if (i >= tamanioBuffer)
   {
-    if (sonido == SONIDO_EXPLOSION || sonido == SONIDO_AGUA || sonido == SONIDO_PULSAR) {
+    if (sonido == SONIDO_EXPLOSION || sonido == SONIDO_AGUA || sonido == SONIDO_PULSAR)
+    {
       sonido = SONIDO_NULO;
       ledcWrite(CHANNEL_PWM, 255);
     }
@@ -267,9 +288,6 @@ void reproduce()
     if (sonido == SONIDO_TOCADO)
     {
       sonido = SONIDO_EXPLOSION;
-      dato = 0;
-      i = 0;
-      j = 0;
     }
   }
 }
@@ -333,6 +351,8 @@ void imagenEstaticaInicio()
   digitalWrite(TFT_CS_A, LOW); // Habilitamos pantalla Aliados
   digitalWrite(TFT_CS_E, LOW); // Habilitamos pantalla Enemigos
 
+  tft.fillScreen(TFT_BLACK);
+
   for (uint8_t i = 0; i <= 8; i++) // Creamos cuadrícula completa con los índices de números y letras
   {
     uint16_t suma = i * 25; // 25 es el ancho de la cuadrícula
@@ -377,9 +397,6 @@ void controlBotones()
     if (sonido == SONIDO_NULO)
     {
       sonido = SONIDO_PULSAR;
-      dato = 0;
-      i = 0;
-      j = 0;
     }
     estadoBotonAnterior[ARRIBA] = LOW;
     tiempoDebounce = millis();
@@ -393,9 +410,6 @@ void controlBotones()
     if (sonido == SONIDO_NULO)
     {
       sonido = SONIDO_PULSAR;
-      dato = 0;
-      i = 0;
-      j = 0;
     }
     estadoBotonAnterior[ABAJO] = LOW;
     tiempoDebounce = millis();
@@ -409,9 +423,6 @@ void controlBotones()
     if (sonido == SONIDO_NULO)
     {
       sonido = SONIDO_PULSAR;
-      dato = 0;
-      i = 0;
-      j = 0;
     }
     estadoBotonAnterior[IZQUIERDA] = LOW;
     tiempoDebounce = millis();
@@ -425,9 +436,6 @@ void controlBotones()
     if (sonido == SONIDO_NULO)
     {
       sonido = SONIDO_PULSAR;
-      dato = 0;
-      i = 0;
-      j = 0;
     }
     estadoBotonAnterior[DERECHA] = LOW;
     tiempoDebounce = millis();
@@ -446,6 +454,23 @@ void controlBotones()
   {
     estadoBotonAnterior[MENU] = LOW;
     tiempoDebounce = millis();
+    if (finJuego)
+    {
+      finJuego = false;
+      for (uint8_t i = 0; i < 8; i++)
+      {
+        for (uint8_t j = 0; j < 8; j++)
+        {
+          mapaEnemigo[i][j] = mapaVacio[i][j];
+        }
+      }
+      for (uint8_t i = 255; i > 0; i--) // Creamos un fundido en la iluminación de las pantallas
+      {
+        ledcWrite(CHANNEL_PWM, i); // Cambiamos el canal del PWM al valor del bucle
+        delay(5);
+      }
+      imagenEstaticaInicio();
+    }
   }
 
   if (estadoBoton[DISPARAR] == LOW && estadoBotonAnterior[DISPARAR] == HIGH && sonido == SONIDO_NULO) // Botón DISPARAR pulsado
@@ -458,9 +483,6 @@ void controlBotones()
     case VACIO:
       mapaEnemigo[cursorEjeX][cursorEjeY] = AGUA;
       sonido = SONIDO_AGUA;
-      dato = 0;
-      i = 0;
-      j = 0;
       break;
     case AGUA:
       mapaEnemigo[cursorEjeX][cursorEjeY] = AGUA;
@@ -475,10 +497,18 @@ void controlBotones()
     case PORTAAVIONES:
       mapaEnemigo[cursorEjeX][cursorEjeY] = TOCADO;
       sonido = SONIDO_TOCADO;
-      dato = 0;
-      i = 0;
-      j = 0;
       break;
+    }
+    alcanzado = 0;
+    for (uint8_t i = 0; i < 8; i++)
+    {
+      for (uint8_t j = 0; j < 8; j++)
+      {
+        if (mapaEnemigo[i][j] == TOCADO)
+          alcanzado++;
+        if (alcanzado == 17)
+          finJuego = true;
+      }
     }
   }
 
@@ -540,6 +570,9 @@ void displayEnemigo()
   static const uint32_t _intervaloIntermitenciaCursor = 250;
   static bool _cambioColor = true;
   static uint8_t _ejeX, _ejeY;
+
+  finPartida();
+
   if (_ejeX != cursorEjeX || _ejeY != cursorEjeY)
   {
     _tiempoIntermitenciaCursor = millis();
@@ -556,4 +589,20 @@ void displayEnemigo()
     tft.fillRect(ejeLetras[cursorEjeX], ejeNumeros[cursorEjeY], 24, 24, _cambioColor ? TFT_GREEN : colorCasillaAnteriorEnemigo(cursorEjeX, cursorEjeY));
   }
   digitalWrite(TFT_CS_E, HIGH); // Desabilitamos escritura en esta pantalla
+}
+
+void finPartida()
+{
+  if (finJuego && alcanzado == 17)
+  {
+    tft.setTextSize(4);
+    tft.setCursor(0, 0);
+    tft.print("YOU WIN");
+  }
+  else if (finJuego && alcanzado < 17)
+  {
+    tft.setTextSize(4);
+    tft.setCursor(0, 0);
+    tft.print("YOY LOST");
+  }
 }
