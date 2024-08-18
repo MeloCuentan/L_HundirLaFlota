@@ -315,17 +315,6 @@ void crearCampoGuerra(uint8_t pantalla)
     digitalWrite(TFT_CS_E, LOW);
     break;
   }
-  /*
-    if (pantalla == PANTALLA_ALIADOS)
-      digitalWrite(TFT_CS_A, LOW);
-    else if (pantalla == PANTALLA_ENEMIGOS)
-      digitalWrite(TFT_CS_E, LOW);
-    else if (pantalla == AMBAS_PANTALLAS)
-    {
-      digitalWrite(TFT_CS_A, LOW);
-      digitalWrite(TFT_CS_E, LOW);
-    }
-  */
 
   tft.fillScreen(TFT_BLACK);
 
@@ -398,8 +387,8 @@ void reproduce() // Reproduce el sonido seleccinoado
 
   switch (numeroSonido) // Seleccionamos el tipo de sonido
   {
-    //  case SONIDO_NULO:
-    //    break;
+   case SONIDO_NULO:
+      break;
   case SONIDO_TOCADO:
     dato = sonidoAgua[i + 1] << 8 | sonidoAgua[i];
     tamanioBuffer = sonidoAguaTam;
@@ -421,29 +410,6 @@ void reproduce() // Reproduce el sonido seleccinoado
     tamanioBuffer = sonidoPulsarTam;
     break;
   }
-
-  /*
-    if (numeroSonido == SONIDO_AGUA || numeroSonido == SONIDO_TOCADO) // Sonido del disparo
-    {
-      dato = sonidoAgua[i + 1] << 8 | sonidoAgua[i];
-      tamanioBuffer = sonidoAguaTam;
-    }
-
-    if (numeroSonido == SONIDO_EXPLOSION) // Sonido de explosión con efecto de brillo
-    {
-      dato = sonidoTocado[i + 1] << 8 | sonidoTocado[i];
-      tamanioBuffer = sonidoTocadoTam;
-      uint8_t valorTemporal = map(sonidoTocado[i + 1], 0, 255, 0, uint8_t(brillo));
-      ledcWrite(CHANNEL_PWM, valorTemporal);
-    }
-
-    if (numeroSonido == SONIDO_PULSAR) // Cuando se pulsa algún botón
-    {
-      ajusteVolumen = 2;
-      dato = sonidoPulsar[i + 1] << 8 | sonidoPulsar[i];
-      tamanioBuffer = sonidoPulsarTam;
-    }
-  */
 
   audioBuffer[j] = dato * ajusteVolumen * volumen;
   audioBuffer[j + 1] = dato * ajusteVolumen * volumen;
@@ -475,23 +441,6 @@ void reproduce() // Reproduce el sonido seleccinoado
       numeroSonido = SONIDO_EXPLOSION;
       break;
     }
-
-    /*
-    if (numeroSonido == SONIDO_EXPLOSION)
-    {
-      numeroSonido = SONIDO_NULO;
-      ledcWrite(CHANNEL_PWM, uint8_t(brillo));
-    }
-    else if (numeroSonido == SONIDO_AGUA || numeroSonido == SONIDO_PULSAR)
-    {
-      numeroSonido = SONIDO_NULO;
-    }
-
-    if (numeroSonido == SONIDO_TOCADO)
-    {
-      numeroSonido = SONIDO_EXPLOSION;
-    }
-    */
   }
 }
 
