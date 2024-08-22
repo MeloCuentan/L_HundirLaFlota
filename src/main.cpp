@@ -5,6 +5,13 @@
 #include <pantallaInicioA.h>
 #include <pantallaInicioB.h>
 #include <sonidos.h>
+#include <EEPROM.h>
+#include <Mapa.h>
+
+// Valores de la EEPROM
+const uint8_t tamanioEEPROM = 32;
+const uint8_t addrEepromVolumen = 0;
+const uint8_t addrEepromBrillo = 1;
 
 enum nombreMenu // Creamos nombres para controlar cada menú
 {
@@ -35,7 +42,8 @@ enum nombreBotones // Creamos nombres para controlar cada pulsador
   BTN_DERECHA,
   BTN_CENTRO,
   BTN_DISPARAR,
-  BTN_MENU
+  BTN_MENU,
+  BTN_NULO
 };
 enum nombreCasillas // Creamos nombres para el control del estado de cada casilla
 {
@@ -56,7 +64,7 @@ enum nombreAjustes // Creamos los nombres para la selección de los distintos aj
   LIMITE_AJUSTE
 };
 
-uint8_t numeroMenu = MENU_IMAGENES_INICIALES;
+uint8_t nombreMenuActual = MENU_IMAGENES_INICIALES;
 
 // Pines utilizados en I2S
 const uint8_t BCK = 16;
@@ -67,20 +75,19 @@ const int8_t DIN = -1;
 uint8_t selectorAjuste = 0;
 
 // Variables generales
-const uint8_t CUADROS_HORIZONTAL = 8;
-const uint8_t CUADROS_VERTICAL = 8;
-const uint8_t ANCHO_CUADRO = 25;
+const uint8_t NUMERO_CUADROS = 8;      // Número de cuadros del mapa en horizontal y vertical
+const uint8_t ANCHO_CURSOR = 28;       // Ancho del cuadrado del cursor
+const uint8_t ANCHO_CUADRO = 29;       // Ancho de cada cuadro
 const uint8_t BRILLO_MINIMO = 30;      // Valor de brillo mínimo que se puede ajustar
-bool finJuego = false;                 // Si ha terminado alguien el juego
+bool finJuego = false;                 // Si ha terminado el juego
 float volumen = 0.5;                   // Volumen predeterminado
 float brillo = 255.0;                  // Brillo predeterminado
 int8_t volumenUsuario = volumen * 100; // Valor de volumen ajustado por el usuario
 uint8_t alcanzado = 0;                 // Número de impactos logrados
 uint8_t brilloUsuario = 100;           // Valor de brillo ajustado por el usuario
-uint8_t numeroSonido = 0;              // Número del sonido a reproducir
-int16_t dato = 0;                      // Valor del array
+uint8_t nombreSonido = SONIDO_NULO;    // Número del sonido a reproducir
+int16_t dato = 0;                      // Valor del array de sonido
 
-i2s_config_t i2sConfig;
 int16_t audioBuffer[512];
 size_t bytesWritten;
 
@@ -101,7 +108,7 @@ const bool BAJA_BRILLO = !SUBE_BRILLO;
 
 bool estadoBoton[CANTIDAD_BOTONES] = {true};         // Estado de los botones
 bool estadoBotonAnterior[CANTIDAD_BOTONES] = {true}; // Estado de los botones anterior
-bool botonActivado[CANTIDAD_BOTONES] = {false};
+uint8_t botonActivado = BTN_NULO;
 
 int8_t cursorEjeX = 0; // Posición X del cursor en el mapa
 int8_t cursorEjeY = 0; // Posición Y del cursor en el mapa
@@ -109,71 +116,36 @@ int8_t cursorEjeY = 0; // Posición Y del cursor en el mapa
 uint32_t tiempoRefresco;          // Control de tiempo para refrescar las pantallas
 uint32_t intervaloRefersco = 100; // Tiempo de refesco de las pantallas
 
-const uint8_t MAPA_VACIO[CUADROS_HORIZONTAL][CUADROS_VERTICAL] = { // Creamos un mapa con todos los valores vacíos
-    0, 0, 0, 0, 6, 6, 6, 6,
-    0, 5, 0, 0, 0, 0, 0, 0,
-    0, 5, 0, 7, 7, 7, 7, 7,
-    0, 5, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 3, 3, 0, 0, 4, 4, 4,
-    0, 0, 0, 0, 0, 0, 0, 0};
+const uint8_t MAPA_VACIO[NUMERO_CUADROS][NUMERO_CUADROS] = {VACIO}; // Creamos un mapa con todos los valores vacíos
 
-uint8_t mapaAliado[CUADROS_HORIZONTAL][CUADROS_VERTICAL] = { // Mapa de nuestros barcos
-    0, 0, 0, 0, 6, 6, 6, 6,
-    0, 5, 0, 0, 0, 0, 0, 0,
-    0, 5, 0, 7, 7, 7, 7, 7,
-    0, 5, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 3, 3, 0, 0, 4, 4, 4,
-    0, 0, 0, 0, 0, 0, 0, 0};
-// uint8_t mapaEnemigo[CUADROS_HORIZONTAL][CUADROS_VERTICAL] = {VACIO};     // Mapa de los barcos del enemigo
-
-uint8_t mapaEnemigo[CUADROS_HORIZONTAL][CUADROS_VERTICAL] = {
-    0, 0, 0, 0, 6, 6, 6, 6,
-    0, 5, 0, 0, 0, 0, 0, 0,
-    0, 5, 0, 7, 7, 7, 7, 7,
-    0, 5, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0,
-    0, 3, 3, 0, 0, 4, 4, 4,
-    0, 0, 0, 0, 0, 0, 0, 0};
-
-const uint16_t EJE_NUMEROS[CUADROS_HORIZONTAL] = {111, 136, 161, 186, 211, 236, 261, 286}; // Número en píxeles del eje Y de cada cuadro
-const uint16_t EJE_LETRAS[CUADROS_VERTICAL] = {27, 52, 77, 102, 127, 152, 177, 202};       // Número en píxeles del eje X de cada cuadro
-
-const char INDICE_NUMEROS[CUADROS_HORIZONTAL] = {'1', '2', '3', '4', '5', '6', '7', '8'}; // Caracteres a mostrar de cada número del mapa
-const char INDICE_LETRAS[CUADROS_VERTICAL] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'};    // Caracteres a mostrar de cada columna del mapa
-
-void iniciarPines();
-void iniciarPantallas();
-void iniciarI2S();
+void iniciarEEPROM();        // Inicializar memoria EEPROM
+void iniciarPines();         // Inicializa los pines del ESP32S2
+void iniciarPantallas();     // Inicializar las pantallas
+void iniciarI2S();           // Inicializar I2S
+void guardaValoresEEPROM();  // Guarda valores en la EEPROM
+void leerValoresEEPROM();    // Lee valores de la EEPROM
 void pantallaInicio();       // Mostrar imágenes en pantalla de inicio haciendo un fundido con el brillo
 void imagenEstaticaInicio(); // Crear imágen estática donde se quedará durante toda la partida
 void controlBrillo(bool tipoBrillo);
-void crearCampoGuerra(uint8_t pantalla);
-void dibujaBarcosAliados();
-void reproduce();                                                      // Reproduce el sonido
-void cambiarVolumen(String datos);                                     // Cambia el volumen
-void controlBotones();                                                 // Controlar el botón que ha sido pulsado e iniciar la acción correspondiente
-uint16_t colorCasillaAnterior(uint8_t X, uint8_t Y, uint8_t pantalla); // Establece el color de la casilla anterior
-void displayAliado();                                                  // Mostrar la imagen en el display Aliado
-void displayEnemigo();                                                 // Mostrar la imagen en el display Enemigo
-void finPartida();
-void controlMenu();
-void accionBotonesJuego();
+void reproduce();      // Reproduce el sonido
+void controlBotones(); // Controlar el botón que ha sido pulsado e iniciar la acción correspondiente
+void menuActual();
+void movimientoCrusorJuego();
 void accionBotonesAjustes();
-void valoresPantallaAjustes();
-void cambiarVolumen(uint8_t direccion);
-void cambiarBrillo(uint8_t direccion);
+void mostrarPantallaAjustes();
+void cambiarVolumen(uint8_t valor);
+void cambiarBrillo(uint8_t valor);
 
 TFT_eSPI tft = TFT_eSPI(); // Creamos objeto de una pantalla (se utilizarán las dos cambiando el estado del pin CS)
+Mapa enemigos(TFT_CS_E);
+Mapa aliados(TFT_CS_A);
 
 void setup()
 {
   Serial.begin(115200);
 
+  iniciarEEPROM();
+  leerValoresEEPROM();
   iniciarPines();
   iniciarI2S();
   iniciarPantallas();
@@ -181,16 +153,17 @@ void setup()
 
 void loop()
 {
-  controlMenu(); // Controlamos el estado de cada menú según el botón pulsado
   controlBotones();
-  reproduce();                                        // Reproduce el sonido que se haya activado
-  if (millis() - tiempoRefresco >= intervaloRefersco) // Si pasa este tiempo actualizamos las pantallas
-  {
-    tiempoRefresco = millis();
-    displayAliado();
-    displayEnemigo();
-    finPartida();
-  }
+  menuActual();
+  reproduce(); // Reproduce el sonido que se haya activado
+}
+
+void iniciarEEPROM()
+{
+  EEPROM.begin(32);
+  brilloUsuario = EEPROM.read(addrEepromBrillo);
+  volumenUsuario = EEPROM.read(addrEepromVolumen);
+  brillo = (float)brilloUsuario * 2.55;
 }
 
 void iniciarPines()
@@ -207,8 +180,6 @@ void iniciarPines()
 
 void iniciarPantallas()
 {
-  pinMode(TFT_CS_A, OUTPUT);
-  pinMode(TFT_CS_E, OUTPUT);
   digitalWrite(TFT_CS_A, LOW);
   digitalWrite(TFT_CS_E, LOW);
 
@@ -222,25 +193,41 @@ void iniciarPantallas()
 
 void iniciarI2S()
 {
-  i2sConfig.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX);
-  i2sConfig.sample_rate = 44100;
-  i2sConfig.bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT;
-  i2sConfig.channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT;
-  i2sConfig.communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_STAND_I2S | I2S_COMM_FORMAT_STAND_MSB);
-  i2sConfig.intr_alloc_flags = 0;
-  i2sConfig.dma_buf_count = 8;
-  i2sConfig.dma_buf_len = I2S_MCLK_MULTIPLE_256;
-  i2sConfig.use_apll = false;
-  i2sConfig.tx_desc_auto_clear = true;
-  i2sConfig.fixed_mclk = 0;
-  i2s_driver_install(I2S_NUM_0, &i2sConfig, 0, NULL);
+  i2s_config_t i2sConfig = {
+      .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_TX),
+      .sample_rate = 44100,
+      .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
+      .channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,
+      .communication_format = i2s_comm_format_t(I2S_COMM_FORMAT_STAND_I2S | I2S_COMM_FORMAT_STAND_MSB),
+      .intr_alloc_flags = 0,
+      .dma_buf_count = 8,
+      .dma_buf_len = I2S_MCLK_MULTIPLE_256,
+      .use_apll = false,
+      .tx_desc_auto_clear = true,
+      .fixed_mclk = 0};
 
-  i2s_pin_config_t pinConfig;
-  pinConfig.bck_io_num = BCK;   // Pin de reloj de bit
-  pinConfig.ws_io_num = LRC;    // Pin de selección de palabra
-  pinConfig.data_out_num = DOU; // Pin de datos de salida
-  pinConfig.data_in_num = DIN;  // No se utiliza la entrada de datos
+  i2s_pin_config_t pinConfig = {
+      .bck_io_num = BCK,
+      .ws_io_num = LRC,
+      .data_out_num = DOU,
+      .data_in_num = DIN};
+
+  i2s_driver_install(I2S_NUM_0, &i2sConfig, 0, NULL);
   i2s_set_pin(I2S_NUM_0, &pinConfig);
+}
+
+void guardaValoresEEPROM()
+{
+  EEPROM.write(addrEepromBrillo, brilloUsuario);
+  EEPROM.write(addrEepromVolumen, volumenUsuario);
+  EEPROM.end();
+}
+
+void leerValoresEEPROM()
+{
+  brilloUsuario = EEPROM.read(addrEepromBrillo);
+  volumenUsuario = EEPROM.read(addrEepromVolumen);
+  brillo = float(brilloUsuario) * 2.5;
 }
 
 void pantallaInicio() // Mostramos una imagen en cada pantalla durante poco tiempo haciendo un fundido de inicio y fin
@@ -270,7 +257,8 @@ void pantallaInicio() // Mostramos una imagen en cada pantalla durante poco tiem
 
 void imagenEstaticaInicio() // Creamos toda la imagen que hay que mostrar y dejar de manera etática en ambas pantallas
 {
-  crearCampoGuerra(AMBAS_PANTALLAS);
+  aliados.dibujarMapa();
+  enemigos.dibujarMapa();
   controlBrillo(SUBE_BRILLO);
 }
 
@@ -294,82 +282,6 @@ void controlBrillo(bool tipoBrillo)
   }
 }
 
-/**
- * @brief Creamos la imágen estática del campo de batalla con los índices
- *
- * @param pantalla Rercibe qué pantalla es la que vamos a dibujar
- * @param datos Recibe el valor para saber si restauramos el valor anterior del campo de batalla
- */
-void crearCampoGuerra(uint8_t pantalla)
-{
-  switch (pantalla)
-  {
-  case PANTALLA_ALIADOS:
-    digitalWrite(TFT_CS_A, LOW);
-    break;
-  case PANTALLA_ENEMIGOS:
-    digitalWrite(TFT_CS_E, LOW);
-    break;
-  default:
-    digitalWrite(TFT_CS_A, LOW);
-    digitalWrite(TFT_CS_E, LOW);
-    break;
-  }
-
-  tft.fillScreen(TFT_BLACK);
-
-  for (uint8_t i = 0; i <= CUADROS_HORIZONTAL; i++) // Creamos cuadrícula completa con los índices de números y letras
-  {
-    uint16_t suma = i * ANCHO_CUADRO; // 25 es el ancho de la cuadrícula
-
-    if (i != CUADROS_VERTICAL)
-    {
-      tft.setTextColor(TFT_WHITE, TFT_BLACK); // Color del texto, color de fondo
-      tft.setTextSize(2);                     // Tamaño del texto
-      tft.setCursor(34 + suma, 90);           // Establecemos posición
-      tft.print(INDICE_LETRAS[i]);            // Pintamos las letras
-      tft.setCursor(10, 116 + suma);          // Establecemos posición
-      tft.print(INDICE_NUMEROS[i]);           // Pintamos los números
-    }
-
-    tft.drawLine(26, 110 + suma, 226, 110 + suma, TFT_WHITE); // Dibujamos las líneas horizontales
-    tft.drawLine(26 + suma, 110, 26 + suma, 310, TFT_WHITE);  // Dibujamos las líneas verticales
-  }
-  digitalWrite(TFT_CS_A, HIGH);
-  digitalWrite(TFT_CS_E, HIGH);
-}
-
-void dibujaBarcosAliados()
-{
-  digitalWrite(TFT_CS_A, LOW);
-  for (uint8_t i = 0; i < CUADROS_HORIZONTAL; i++)
-  {
-    for (uint8_t j = 0; j < CUADROS_VERTICAL; j++)
-    {
-      uint16_t colorTemporal = 0;
-      uint8_t valorTemporal = mapaAliado[i][j];
-      if (valorTemporal == VACIO)
-      {
-        colorTemporal = TFT_BLACK;
-      }
-      else if (valorTemporal == AGUA)
-      {
-        colorTemporal = TFT_BLUE;
-      }
-      else if (valorTemporal == TOCADO)
-      {
-        colorTemporal = TFT_RED;
-      }
-      else
-      {
-        colorTemporal = TFT_YELLOW;
-      }
-      tft.fillRect(EJE_LETRAS[i], EJE_NUMEROS[j], 24, 24, colorTemporal);
-    }
-  }
-  digitalWrite(TFT_CS_A, HIGH);
-}
-
 void reproduce() // Reproduce el sonido seleccinoado
 {
   static uint8_t sonidoAnterior;
@@ -377,18 +289,18 @@ void reproduce() // Reproduce el sonido seleccinoado
   static int32_t i, j;
   float ajusteVolumen = 1.0;
 
-  if (sonidoAnterior != numeroSonido) // Reiniciamos el contador
+  if (sonidoAnterior != nombreSonido) // Reiniciamos el contador
   {
-    sonidoAnterior = numeroSonido;
+    sonidoAnterior = nombreSonido;
     dato = 0;
     i = 0;
     j = 0;
   }
 
-  switch (numeroSonido) // Seleccionamos el tipo de sonido
+  switch (nombreSonido) // Seleccionamos el tipo de sonido
   {
-   case SONIDO_NULO:
-      break;
+  case SONIDO_NULO:
+    break;
   case SONIDO_TOCADO:
     dato = sonidoAgua[i + 1] << 8 | sonidoAgua[i];
     tamanioBuffer = sonidoAguaTam;
@@ -425,36 +337,23 @@ void reproduce() // Reproduce el sonido seleccinoado
 
   if (i >= tamanioBuffer)
   {
-    switch (numeroSonido)
+    switch (nombreSonido)
     {
     case SONIDO_EXPLOSION:
-      numeroSonido = SONIDO_NULO;
+      nombreSonido = SONIDO_NULO;
       ledcWrite(CHANNEL_PWM, uint8_t(brillo));
       break;
     case SONIDO_AGUA:
-      numeroSonido = SONIDO_NULO;
+      nombreSonido = SONIDO_NULO;
       break;
     case SONIDO_PULSAR:
-      numeroSonido = SONIDO_NULO;
+      nombreSonido = SONIDO_NULO;
       break;
     case SONIDO_TOCADO:
-      numeroSonido = SONIDO_EXPLOSION;
+      nombreSonido = SONIDO_EXPLOSION;
       break;
     }
   }
-}
-
-void cambiarVolumen(String datos)
-{
-  String valor = "";
-  valor += datos[1];
-  valor += datos[2];
-  valor += datos[3];
-  uint8_t nuevoValor = valor.toInt();
-  if (nuevoValor > 50)
-    nuevoValor = 50;
-  if (nuevoValor >= 0 && nuevoValor <= 100)
-    volumen = nuevoValor / 100.0;
 }
 
 void controlBotones() // Controlamos el estado de cualquier pulsador
@@ -469,7 +368,7 @@ void controlBotones() // Controlamos el estado de cualquier pulsador
     {
       estadoBotonAnterior[i] = estadoBoton[i];
       tiempoDebounce = millis();
-      botonActivado[i] = true;
+      botonActivado = i;
     }
   }
 
@@ -483,365 +382,203 @@ void controlBotones() // Controlamos el estado de cualquier pulsador
   }
 }
 
-/**
- * @brief Controlamos el estado de la casilla anterior según el mapa de como esté en ese momento
- *
- * @param X Coordenada del eje X
- * @param Y Coordenada del eje Y
- * @param pantalla Enviamos a qué pantalla es la que queremos obtener el dato
- * @return uint16_t Color que devuelve
- */
-uint16_t colorCasillaAnterior(uint8_t X, uint8_t Y, uint8_t pantalla)
+void menuActual()
 {
-  uint8_t valor = 0;
-  if (pantalla == PANTALLA_ENEMIGOS)
-    valor = mapaEnemigo[X][Y];
-  else if (pantalla == PANTALLA_ALIADOS)
-    valor = mapaAliado[X][Y];
-
-  switch (valor)
+  switch (nombreMenuActual)
   {
-  case VACIO:
-    return TFT_BLACK;
+  case MENU_INICIO:
+    controlBrillo(SUBE_BRILLO);
+    nombreMenuActual = MENU_JUEGO;
     break;
-  case AGUA:
-    return TFT_BLUE;
-    break;
-  case TOCADO:
-    return TFT_RED;
-    break;
-  }
-  return VACIO;
-}
-
-void displayAliado() // Mostramos el display de los aliados
-{
-  digitalWrite(TFT_CS_A, LOW); // Habilitamos escritura en esta pantalla
-
-  digitalWrite(TFT_CS_A, HIGH); // Desabilitamos escritura en esta pantalla
-}
-
-void displayEnemigo() // Mostramos el display de los enemigos
-{
-  digitalWrite(TFT_CS_E, LOW); // Habilitamos escritura en esta pantalla
-
-  static uint32_t _tiempoIntermitenciaCursor;
-  static const uint32_t _intervaloIntermitenciaCursor = 250;
-  static bool _cambioColor = true;
-  static uint8_t _ejeX, _ejeY;
-
-  if (_ejeX != cursorEjeX || _ejeY != cursorEjeY)
-  {
-    _tiempoIntermitenciaCursor = millis();
-
-    tft.fillRect(EJE_LETRAS[cursorEjeX], EJE_NUMEROS[cursorEjeY], 24, 24, TFT_GREEN);
-    tft.fillRect(EJE_LETRAS[_ejeX], EJE_NUMEROS[_ejeY], 24, 24, colorCasillaAnterior(_ejeX, _ejeY, PANTALLA_ENEMIGOS));
-    _ejeX = cursorEjeX;
-    _ejeY = cursorEjeY;
-  }
-
-  if (numeroMenu == MENU_JUEGO)
-  {
-    if (millis() - _tiempoIntermitenciaCursor >= _intervaloIntermitenciaCursor)
-    {
-      _tiempoIntermitenciaCursor = millis();
-      _cambioColor = !_cambioColor;
-      tft.fillRect(EJE_LETRAS[cursorEjeX], EJE_NUMEROS[cursorEjeY], 24, 24, _cambioColor ? TFT_GREEN : colorCasillaAnterior(cursorEjeX, cursorEjeY, PANTALLA_ENEMIGOS));
-    }
-  }
-  else
-  {
-    tft.fillRect(EJE_LETRAS[cursorEjeX], EJE_NUMEROS[cursorEjeY], 24, 24, colorCasillaAnterior(cursorEjeX, cursorEjeY, PANTALLA_ENEMIGOS));
-  }
-
-  digitalWrite(TFT_CS_E, HIGH); // Desabilitamos escritura en esta pantalla
-}
-
-void finPartida()
-{
-  if (finJuego && alcanzado == 17 && numeroMenu != MENU_AJUSTES)
-  {
-    digitalWrite(TFT_CS_E, LOW);
-    digitalWrite(TFT_CS_A, LOW);
-
-    tft.setTextSize(4);
-    tft.setCursor(36, 29);
-    tft.print(F("YOU WIN"));
-
-    digitalWrite(TFT_CS_E, HIGH);
-    digitalWrite(TFT_CS_A, HIGH);
-  }
-  else if (finJuego && alcanzado < 17)
-  {
-    digitalWrite(TFT_CS_E, LOW);
-    digitalWrite(TFT_CS_A, LOW);
-
-    tft.setTextSize(4);
-    tft.setCursor(24, 29);
-    tft.print(F("YOU LOST"));
-
-    digitalWrite(TFT_CS_E, HIGH);
-    digitalWrite(TFT_CS_A, HIGH);
-  }
-}
-
-void controlMenu()
-{
-  switch (numeroMenu)
-  {
   case MENU_IMAGENES_INICIALES:
     pantallaInicio();
-    numeroMenu = MENU_INICIO;
-    break;
-  case MENU_INICIO:
     imagenEstaticaInicio();
-    numeroMenu = MENU_JUEGO;
+    nombreMenuActual = MENU_JUEGO;
     break;
   case MENU_JUEGO:
-    accionBotonesJuego();
+    movimientoCrusorJuego();
+    enemigos.cursorMapa(cursorEjeX, cursorEjeY);
     break;
   case MENU_AJUSTES:
-    valoresPantallaAjustes();
+    mostrarPantallaAjustes();
     accionBotonesAjustes();
     break;
   }
 }
 
-void mostrarDisplayAjustes()
+void movimientoCrusorJuego()
 {
-  digitalWrite(TFT_CS_A, LOW); // Habilitamos escritura en esta pantalla
-  tft.fillScreen(TFT_BLACK);
-  tft.setTextSize(2);
-  tft.setCursor(24, 0);
-  tft.print(F("NUEVO JUEGO"));
-  tft.setCursor(24, 16);
-  tft.print(F("VOLUMEN:"));
-  tft.setCursor(24, 32);
-  tft.print(F("BRILLO:"));
-  digitalWrite(TFT_CS_A, HIGH); // Desabilitamos escritura en esta pantalla
-}
-
-void accionBotonesJuego()
-{
-  if (botonActivado[BTN_ARRIBA]) // Movemos el cursor hacia arriba
+  uint8_t estadoActualBoton = botonActivado;
+  botonActivado = BTN_NULO;
+  switch (estadoActualBoton)
   {
-    botonActivado[BTN_ARRIBA] = false;
-    if (numeroSonido == SONIDO_NULO)
+  case BTN_ARRIBA:
+    if (cursorEjeY > 0)
     {
-      numeroSonido = SONIDO_PULSAR;
+      cursorEjeY--;
+      if (nombreSonido == SONIDO_NULO)
+        nombreSonido = SONIDO_PULSAR;
     }
-    cursorEjeY--;
-    if (cursorEjeY < 0)
-      cursorEjeY = 7;
-  }
-  if (botonActivado[BTN_ABAJO]) // Movemos el cursor hacia abajo
-  {
-    botonActivado[BTN_ABAJO] = false;
-    if (numeroSonido == SONIDO_NULO)
+    break;
+  case BTN_ABAJO:
+    if (cursorEjeY < 7)
     {
-      numeroSonido = SONIDO_PULSAR;
+      cursorEjeY++;
+      if (nombreSonido == SONIDO_NULO)
+        nombreSonido = SONIDO_PULSAR;
     }
-    cursorEjeY++;
-    if (cursorEjeY > 7)
-      cursorEjeY = 0;
-  }
-  if (botonActivado[BTN_IZQUIERDA]) // Movemos el cursor a la izquierda
-  {
-    botonActivado[BTN_IZQUIERDA] = false;
-    if (numeroSonido == SONIDO_NULO)
+    break;
+  case BTN_IZQUIERDA:
+    if (cursorEjeX > 0)
     {
-      numeroSonido = SONIDO_PULSAR;
+      cursorEjeX--;
+      if (nombreSonido == SONIDO_NULO)
+        nombreSonido = SONIDO_PULSAR;
     }
-    cursorEjeX--;
-    if (cursorEjeX < 0)
-      cursorEjeX = 7;
-  }
-  if (botonActivado[BTN_DERECHA]) // Movemos el cursor a la derecha
-  {
-    botonActivado[BTN_DERECHA] = false;
-    if (numeroSonido == SONIDO_NULO)
+    break;
+  case BTN_DERECHA:
+    if (cursorEjeX < 7)
     {
-      numeroSonido = SONIDO_PULSAR;
+      cursorEjeX++;
+      if (nombreSonido == SONIDO_NULO)
+        nombreSonido = SONIDO_PULSAR;
     }
-    cursorEjeX++;
-    if (cursorEjeX > 7)
-      cursorEjeX = 0;
-  }
-  if (botonActivado[BTN_CENTRO]) // Apagamos las pantallas
-  {
-    botonActivado[BTN_CENTRO] = false;
-  }
-  if (botonActivado[BTN_DISPARAR]) // Disparamos en la posición del cursor
-  {
-    botonActivado[BTN_DISPARAR] = false;
-    if (numeroSonido == SONIDO_NULO)
-    {
-      switch (mapaEnemigo[cursorEjeX][cursorEjeY]) // Ponemos el color de la casilla según corresponda
-      {
-      case VACIO:
-        mapaEnemigo[cursorEjeX][cursorEjeY] = AGUA;
-        numeroSonido = SONIDO_AGUA;
-        break;
-      case AGUA:
-        mapaEnemigo[cursorEjeX][cursorEjeY] = AGUA;
-        break;
-      case TOCADO:
-        mapaEnemigo[cursorEjeX][cursorEjeY] = TOCADO;
-        break;
-      case FRAGATA:
-      case DESTRUCTOR:
-      case SUBMARINO:
-      case ACORAZADO:
-      case PORTAAVIONES:
-        mapaEnemigo[cursorEjeX][cursorEjeY] = TOCADO;
-        numeroSonido = SONIDO_TOCADO;
-        break;
-      }
-      alcanzado = 0;
-      for (uint8_t i = 0; i < 8; i++)
-      {
-        for (uint8_t j = 0; j < 8; j++)
-        {
-          if (mapaEnemigo[i][j] == TOCADO)
-            alcanzado++;
-          if (alcanzado == 17)
-            finJuego = true;
-        }
-      }
-    }
-  }
-  if (botonActivado[BTN_MENU]) // Iremos al menú principal para cambiar ajustes o terminar partida
-  {
-    botonActivado[BTN_MENU] = false;
-    numeroMenu = MENU_AJUSTES;
-    selectorAjuste = AJUSTE_NUEVO_JUEGO;
-    mostrarDisplayAjustes();
-    valoresPantallaAjustes();
-    delay(500);
+    break;
+  case BTN_CENTRO:
+    if (nombreSonido == SONIDO_NULO)
+      nombreSonido = SONIDO_PULSAR;
+    break;
+  case BTN_DISPARAR:
+    if (nombreSonido == SONIDO_NULO)
+      if (enemigos.disparar(cursorEjeX, cursorEjeY))
+        nombreSonido = SONIDO_TOCADO;
+      else
+        nombreSonido = SONIDO_AGUA;
+    break;
+  case BTN_MENU:
+    if (nombreSonido == SONIDO_NULO)
+      nombreSonido = SONIDO_PULSAR;
+    nombreMenuActual = MENU_AJUSTES;
+    digitalWrite(TFT_CS_A, LOW);
+    tft.fillScreen(TFT_BLACK);
+    digitalWrite(TFT_CS_A, HIGH);
+    break;
   }
 }
 
 void accionBotonesAjustes()
 {
-  uint8_t direccion = 0;
+  uint8_t estadoActualBoton = botonActivado;
+  botonActivado = BTN_NULO;
+  uint8_t valor = 0;
 
-  if (botonActivado[BTN_ARRIBA]) // Movemos el cursor hacia arriba
+  switch (estadoActualBoton)
   {
-    botonActivado[BTN_ARRIBA] = false;
+  case BTN_ARRIBA:
     if (selectorAjuste > 0)
+    {
+      nombreSonido = SONIDO_PULSAR;
       selectorAjuste--;
-    numeroSonido = SONIDO_PULSAR;
-  }
-
-  if (botonActivado[BTN_ABAJO]) // Movemos el cursor hacia abajo
-  {
-    botonActivado[BTN_ABAJO] = false;
+    }
+    break;
+  case BTN_ABAJO:
     if (selectorAjuste < LIMITE_AJUSTE - 1)
+    {
+      nombreSonido = SONIDO_PULSAR;
       selectorAjuste++;
-    numeroSonido = SONIDO_PULSAR;
-  }
-
-  if (botonActivado[BTN_IZQUIERDA]) // Movemos el cursor a la izquierda
-  {
-    botonActivado[BTN_IZQUIERDA] = false;
-    direccion = 1;
-    numeroSonido = SONIDO_PULSAR;
-  }
-
-  if (botonActivado[BTN_DERECHA]) // Movemos el cursor a la derecha
-  {
-    botonActivado[BTN_DERECHA] = false;
-    direccion = 2;
-    numeroSonido = SONIDO_PULSAR;
-  }
-
-  if (botonActivado[BTN_CENTRO]) // Apagamos las pantallas
-  {
-    botonActivado[BTN_CENTRO] = false;
-  }
-
-  if (botonActivado[BTN_DISPARAR]) // Disparamos en la posición del cursor
-  {
-    botonActivado[BTN_DISPARAR] = false;
+    }
+    break;
+  case BTN_IZQUIERDA:
+    valor = 1;
+    break;
+  case BTN_DERECHA:
+    valor = 2;
+    break;
+  case BTN_CENTRO:
+    break;
+  case BTN_DISPARAR:
     if (selectorAjuste == AJUSTE_NUEVO_JUEGO)
     {
-      numeroMenu = MENU_INICIO;
+      guardaValoresEEPROM();
+      nombreMenuActual = MENU_INICIO;
       finJuego = false;
-      for (uint8_t i = 0; i < 8; i++)
-      {
-        for (uint8_t j = 0; j < 8; j++)
-        {
-          mapaEnemigo[i][j] = MAPA_VACIO[i][j];
-        }
-      }
       controlBrillo(BAJA_BRILLO);
-      dibujaBarcosAliados();
+      enemigos.vaciarMapa();
+      aliados.vaciarMapa();
+      aliados.dibujarMapa();
+      enemigos.dibujarMapa();
     }
-  }
-
-  if (botonActivado[BTN_MENU]) // Iremos al menú principal para cambiar ajustes o terminar partida
-  {
-    botonActivado[BTN_MENU] = false;
-    numeroMenu = MENU_JUEGO;
-    crearCampoGuerra(PANTALLA_ALIADOS);
-    dibujaBarcosAliados();
+    break;
+  case BTN_MENU:
+    nombreMenuActual = MENU_JUEGO;
+    guardaValoresEEPROM();
+    aliados.dibujarMapa();
     delay(500);
+    break;
+  case BTN_NULO:
+    break;
   }
 
   switch (selectorAjuste)
   {
   case AJUSTE_VOLUMEN:
-    cambiarVolumen(direccion);
+    cambiarVolumen(valor);
     break;
   case AJUSTE_BRILLO:
-    cambiarBrillo(direccion);
+    cambiarBrillo(valor);
     break;
   }
 }
 
-void cambiarVolumen(uint8_t direccion)
+void cambiarVolumen(uint8_t valor)
 {
-  switch (direccion)
+  switch (valor)
   {
   case 1:
     if (volumenUsuario > 0)
     {
+      nombreSonido = SONIDO_PULSAR;
       volumenUsuario -= 10;
-      valoresPantallaAjustes();
+      mostrarPantallaAjustes();
     }
     break;
   case 2:
     if (volumenUsuario < 100)
     {
+      nombreSonido = SONIDO_PULSAR;
       volumenUsuario += 10;
-      valoresPantallaAjustes();
+      mostrarPantallaAjustes();
     }
     break;
   }
 }
 
-void cambiarBrillo(uint8_t direccion)
+void cambiarBrillo(uint8_t valor)
 {
-  switch (direccion)
+  switch (valor)
   {
   case 1:
     if (brilloUsuario > BRILLO_MINIMO)
     {
+      nombreSonido = SONIDO_PULSAR;
       brilloUsuario -= 10;
-      valoresPantallaAjustes();
+      mostrarPantallaAjustes();
     }
     break;
   case 2:
     if (brilloUsuario < 100)
     {
+      nombreSonido = SONIDO_PULSAR;
       brilloUsuario += 10;
-      valoresPantallaAjustes();
+      mostrarPantallaAjustes();
     }
+    if (brilloUsuario > 100)
+      brilloUsuario = 100;
     break;
   }
 }
 
-void valoresPantallaAjustes()
+void mostrarPantallaAjustes()
 {
   static uint32_t tiempoIntermitencia, intervaloIntermitencia = 200;
   static bool intermitencia;
@@ -854,6 +591,10 @@ void valoresPantallaAjustes()
     digitalWrite(TFT_CS_A, LOW);
 
     tft.setTextSize(2);
+    tft.setCursor(24, 16);
+    tft.print(F("VOLUMEN:"));
+    tft.setCursor(24, 32);
+    tft.print(F("BRILLO:"));
 
     // MOSTRAMOS OPCION NUEVO JUEGO
     tft.setCursor(24, 0);
@@ -918,7 +659,7 @@ void valoresPantallaAjustes()
         tft.print(F(" "));
       tft.print(brilloUsuario / 10);
     }
-    brillo = float(brilloUsuario / 100.0) * 255.0;
+    brillo = float(brilloUsuario * 255) / 100.0;
     ledcWrite(CHANNEL_PWM, uint8_t(brillo));
 
     digitalWrite(TFT_CS_A, HIGH);
